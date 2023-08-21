@@ -1,0 +1,6 @@
+langchain
+flask
+python-dotenv
+scikit-learn
+openai
+chromadb
