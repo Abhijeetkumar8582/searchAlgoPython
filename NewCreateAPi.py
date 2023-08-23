@@ -17,9 +17,17 @@ from langchain.prompts import PromptTemplate
 from langchain.chains.question_answering import load_qa_chain
 import requests
 from langchain.document_loaders.csv_loader import CSVLoader
+import jwt
+import pymongo
+
+
+
 app = Flask(__name__)
 
+
 load_dotenv('file.env')
+
+# app.run(port=8080)
 @app.route('/', methods=['GET'])
 def home():
     x_api_key = request.headers.get('X-Api-Key')
@@ -30,33 +38,34 @@ def home():
 @app.route('/get_answer', methods=['POST'])
 def get_answer():
     try:
-        x_api_key = request.headers.get('X-Api-Key')
+        jwt_token = os.getenv('JWT_TOKEN')
+        secret_key = request.headers.get('X-Api-Key')
+        print(secret_key)
+        try:
+            decoded_token = jwt.decode(secret_key, jwt_token, algorithms=["HS256"])
+            print(decoded_token)
+        except jwt.ExpiredSignatureError:
+            return "Token has expired.", 401
+        except jwt.InvalidTokenError:
+            return "Invalid token.", 401
 
         # Fetch document details using the x_api_key
-        document_response = requests.get(
-            'http://13.233.174.182:3000/user/getDetail',
-            headers={'X-Api-Key': x_api_key}
-        )
-        document_data = document_response.json()
+        mongo_uri = os.getenv('MONGO_URI')
+        database_name = os.getenv('DATABASE_NAME')
+        collection_name = os.getenv('COLLECTION_NAME')
+        print(os.getenv('COLLECTION_NAME'))
+        # Establish a connection to MongoDB
+        client = pymongo.MongoClient(mongo_uri)
+        db = client[database_name]
+        collection = db[collection_name]
+        email_id = decoded_token['email']
+        query = {"email": email_id}
+        result = collection.find(query)
+        for document in result:
+           document_url = document["documentUrl"]
 
-        document_url = document_data['Document']
-        file_extension = document_url.split('.')[-1].lower()
-
-        # Load documents based on file type
-        if file_extension == 'pdf':
-            loader = PyPDFLoader(document_url)
-        elif file_extension == 'csv':
-            response = requests.get(document_url)
-            if response.status_code == 200:
-                local_file_path = 'downloaded.csv'
-                with open(local_file_path, 'wb') as f:
-                    f.write(response.content)
-                loader = CSVLoader(local_file_path)
-            else:
-                return jsonify({'error': 'Failed to download the CSV file'})
-        else:
-            return jsonify({'error': 'Unsupported file type'})
-
+        loader = PyPDFLoader(document_url)
+        
         pages = loader.load_and_split()
         text_splitter = CharacterTextSplitter(chunk_size=250, chunk_overlap=0)
         texts = text_splitter.split_documents(pages)
@@ -105,7 +114,7 @@ def get_answer():
             retriever=db.as_retriever(), 
             chain_type_kwargs=chain_type_kwargs
             )
-
+        
         # conversation.predict(optimize_query)
         result = chain.run(optimize_query)
         
