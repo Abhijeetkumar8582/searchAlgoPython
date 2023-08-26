@@ -1,0 +1,12 @@
+pydantic>=1.8,<2.0
+langchain
+flask
+python-dotenv
+scikit-learn
+openai
+chromadb
+pyjwt
+pymongo
+PyPDF2
+tiktoken
+pypdf
